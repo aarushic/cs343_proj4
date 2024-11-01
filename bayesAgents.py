@@ -97,28 +97,28 @@ def constructBayesNet(gameState):
     variableDomainsDict = {}
 
     "*** YOUR CODE HERE ***"
+    #set each `variableDomainsDict[var] = values`, where `values` is the set of possible assignments to `var`. These should again be set using the constants defined at the top of this file.
     variableDomainsDict[X_POS_VAR] = X_POS_VALS
     variableDomainsDict[Y_POS_VAR] = Y_POS_VALS
     variableDomainsDict[FOOD_HOUSE_VAR] = HOUSE_VALS
     variableDomainsDict[GHOST_HOUSE_VAR] = HOUSE_VALS
     
-    # Populate observation variables
+    #populate `obsVars` using the procedure above
     for housePos in gameState.getPossibleHouses():
-        # print("housePos",housePos)
         for obsPos in gameState.getHouseWalls(housePos):
             obsVar = OBS_VAR_TEMPLATE % obsPos
             obsVars.append(obsVar)
             variableDomainsDict[obsVar] = OBS_VALS
     
-    # Define edges for house positioning and observation dependencies
+    #populate `edges` with every edge in the Bayes Net (a tuple `(from, to)`)
     edges += [(X_POS_VAR, FOOD_HOUSE_VAR), (X_POS_VAR, GHOST_HOUSE_VAR)]
     edges += [(Y_POS_VAR, FOOD_HOUSE_VAR), (Y_POS_VAR, GHOST_HOUSE_VAR)]
     for obsVar in obsVars:
         edges.append((FOOD_HOUSE_VAR, obsVar))
         edges.append((GHOST_HOUSE_VAR, obsVar))
-
-    variables = [X_POS_VAR, Y_POS_VAR] + HOUSE_VARS + obsVars
-    net = bn.constructEmptyBayesNet(variables, edges, variableDomainsDict)
+    
+    vars = [X_POS_VAR, Y_POS_VAR] + HOUSE_VARS + obsVars
+    net = bn.constructEmptyBayesNet(vars, edges, variableDomainsDict)
     return net, obsVars
 
 def fillCPTs(bayesNet, gameState):
@@ -148,8 +148,8 @@ def fillYCPT(bayesNet, gameState):
     "*** YOUR CODE HERE ***"
     # util.raiseNotDefined()
     yFactor.setProbability({Y_POS_VAR: BOTH_TOP_VAL}, PROB_BOTH_TOP)
-    yFactor.setProbability({Y_POS_VAR: BOTH_BOTTOM_VAL}, PROB_BOTH_BOTTOM)
     yFactor.setProbability({Y_POS_VAR: LEFT_TOP_VAL}, PROB_ONLY_LEFT_TOP)
+    yFactor.setProbability({Y_POS_VAR: BOTH_BOTTOM_VAL}, PROB_BOTH_BOTTOM)
     yFactor.setProbability({Y_POS_VAR: LEFT_BOTTOM_VAL}, PROB_ONLY_LEFT_BOTTOM)
 
     bayesNet.setCPT(Y_POS_VAR, yFactor)
@@ -217,9 +217,9 @@ def fillObsCPT(bayesNet, gameState):
 
     "*** YOUR CODE HERE ***"
     for housePosition in gameState.getPossibleHouses():
-        print("housePosition", housePosition)
+        # print("housePosition", housePosition)
         for walls in gameState.getHouseWalls(housePosition):
-            print("observation", walls)
+            # print("observation", walls)
 
             #create observation variable name using the template
             obsVar = OBS_VAR_TEMPLATE % walls
@@ -287,7 +287,6 @@ def getMostLikelyFoodHousePosition(evidence, bayesNet, eliminationOrder):
         if foodHouseDistribution.getProbability(assignment) > bestProb:
             bestProb = foodHouseDistribution.getProbability(assignment)
             bestPos = assignment
-    
     return bestPos
 
 
@@ -390,32 +389,21 @@ class VPIAgent(BayesAgent):
         rightExpectedValue = 0
 
         "*** YOUR CODE HERE ***"
-        CPT = inference.inferenceByVariableElimination(self.bayesNet, HOUSE_VARS, evidence, eliminationOrder)
+        factor = inference.inferenceByVariableElimination(self.bayesNet, HOUSE_VARS, evidence, eliminationOrder)
 
-        # Define possible configurations for left and right houses
-        configurations = [
-            (TOP_LEFT_VAL, TOP_RIGHT_VAL),  # Left food, right ghost
-            (TOP_RIGHT_VAL, TOP_LEFT_VAL),  # Right food, left ghost
-        ]
+        #p(foodHouse = topLeft and ghostHouse = topRight | evidence) and p(foodHouse = topRight and ghostHouse = topLeft | evidence)
+        for assignment in factor.getAllPossibleAssignmentDicts():
+            if assignment[FOOD_HOUSE_VAR] == TOP_LEFT_VAL and assignment[GHOST_HOUSE_VAR] == TOP_RIGHT_VAL:
+                p = factor.getProbability(assignment)
+                leftExpectedValue = p*WON_GAME_REWARD + (1-p)*GHOST_COLLISION_REWARD
+                rightExpectedValue = p*GHOST_COLLISION_REWARD + (1-p)*WON_GAME_REWARD
 
-        # Loop through configurations to calculate expected values
-        for food_house, ghost_house in configurations:
-            # Create copies of the evidence for each configuration
-            config_evidence = evidence.copy()
-            config_evidence[FOOD_HOUSE_VAR] = food_house
-            config_evidence[GHOST_HOUSE_VAR] = ghost_house
+            if assignment[FOOD_HOUSE_VAR] == TOP_RIGHT_VAL and assignment[GHOST_HOUSE_VAR] == TOP_LEFT_VAL:
+                p = factor.getProbability(assignment)
+                rightExpectedValue = p*WON_GAME_REWARD + (1-p)*GHOST_COLLISION_REWARD
+                leftExpectedValue = p*GHOST_COLLISION_REWARD + (1-p)*WON_GAME_REWARD
 
-            # Calculate probabilities for the current configuration
-            probability = CPT.getProbability(config_evidence)
-
-            # Update left and right expected values based on configuration
-            if food_house == TOP_LEFT_VAL:
-                leftExpectedValue += probability * WON_GAME_REWARD
-                rightExpectedValue += probability * GHOST_COLLISION_REWARD
-            else:
-                leftExpectedValue += probability * GHOST_COLLISION_REWARD
-                rightExpectedValue += probability * WON_GAME_REWARD
-
+       
         return leftExpectedValue, rightExpectedValue
         
 
@@ -482,17 +470,13 @@ class VPIAgent(BayesAgent):
         expectedValue = 0
 
         "*** YOUR CODE HERE ***"
-        # Iterate over each possible exploration outcome
-        for prob, explorationEvidence in self.getExplorationProbsAndOutcomes(evidence):
-            # Combine the current evidence with the hypothetical exploration evidence
-            combinedEvidence = evidence.copy()
-            combinedEvidence.update(explorationEvidence)
+        #E[value of exploration] = Σ p(new evidence) max_{actions} E[action | old evidence and new evidence] -> given by computeEnterValues
+        for prob, outcome in self.getExplorationProbsAndOutcomes(evidence):
+            newEvidence = evidence.copy()
+            newEvidence.update(outcome)
             
-            # Compute enter values based on this hypothetical evidence
-            leftExpectedValue, rightExpectedValue = self.computeEnterValues(combinedEvidence, enterEliminationOrder)
-            
-            # Update the total expected value, weighted by the probability of this outcome
-            expectedValue += prob * max(leftExpectedValue, rightExpectedValue)
+            leftEV, rightEV = self.computeEnterValues(newEvidence, enterEliminationOrder)
+            expectedValue += prob*max(leftEV, rightEV)
 
         return expectedValue
 

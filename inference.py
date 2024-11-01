@@ -141,8 +141,8 @@ def inferenceByVariableEliminationWithCallTracking(callTrackingList=None):
             else:
                 factors = remainingFactors
 
-        finalFactor = joinFactors(factors)
-        return normalize(finalFactor)
+        joint = joinFactors(factors)
+        return normalize(joint)
         
 
     return inferenceByVariableElimination

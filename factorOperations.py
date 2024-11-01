@@ -165,7 +165,7 @@ def eliminateWithCallTracking(callTrackingList=None):
                     "unconditionedVariables: " + str(factor.unconditionedVariables()))
 
         "*** YOUR CODE HERE ***"
-        # util.raiseNotDefined()
+       
         unconditioned = set()
         for var in factor.unconditionedVariables():
             if var != eliminationVariable:
@@ -238,7 +238,7 @@ def normalize(factor):
                             str(factor))
 
     "*** YOUR CODE HERE ***"
-    # util.raiseNotDefined()
+   
     sumProb = 0
     for assignment in factor.getAllPossibleAssignmentDicts():
         sumProb += factor.getProbability(assignment)
